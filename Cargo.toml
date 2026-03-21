@@ -2,5 +2,7 @@
 name = "shacmp_rs"
 version = "0.1.0"
 edition = "2024"
+authors = ["Alexandre Rancati-Palmer <arp-dev@pm.me>"]
 
 [dependencies]
+sha2 = "0.10.9"
