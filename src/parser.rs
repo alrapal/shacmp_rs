@@ -1,5 +1,5 @@
 //! This module provides a CLI argument parser that provides a verified configuration
-//! to provide to `crate::comparator::ShaComparator`.
+//! to provide to `crate::comparator::Comparator`.
 //!
 //! # Example
 //!
@@ -14,36 +14,36 @@ use std::{
     str::FromStr,
 };
 
-use crate::sha::{HashType, ShaTypeError};
+use crate::adapter::{HashType, HashTypeError};
 
 /// Different types of error that can occur during parsing
 ///
 /// The different errors can be:
-/// - `MissingFile`: The path to the file to produce a hash for comparison with the reference is not provided.
+/// - `MissingFile`   : The path to the file to produce a hash for comparison with the reference is not provided.
 /// - `MissingShaType`: The type of SHA algorithm to use is not provided
 /// - `InvalidShaType`: The type of SHA algorithm provided is not supported or does not exist
-/// - `MissingShaRef`: The reference hash string is to compare with is not provided
+/// - `MissingShaRef` : The reference hash string is to compare with is not provided
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParsingError {
     MissingFile,
-    MissingShaType,
-    InvalidShaType,
-    MissingShaRef,
+    MissingHashType,
+    InvalidHashType,
+    MissingHashReference,
 }
 
-impl From<ShaTypeError> for ParsingError {
-    fn from(_: ShaTypeError) -> Self {
-        ParsingError::InvalidShaType
+impl From<HashTypeError> for ParsingError {
+    fn from(_: HashTypeError) -> Self {
+        ParsingError::InvalidHashType
     }
 }
 
 impl fmt::Display for ParsingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingFile => write!(f, "Missing file path"),
-            Self::MissingShaRef => write!(f, "Missing SHA reference"),
-            Self::MissingShaType => write!(f, "Missing SHA type"),
-            Self::InvalidShaType => write!(f, "Invalid SHA type"),
+            Self::MissingFile => write!(f, "Missing path to file to process"),
+            Self::MissingHashReference => write!(f, "Missing hash reference for comparison"),
+            Self::MissingHashType => write!(f, "Missing hash algorithm type"),
+            Self::InvalidHashType => write!(f, "Invalid hash algorithm type"),
         }
     }
 }
@@ -52,23 +52,29 @@ impl fmt::Display for ParsingError {
 /// This is used with the `shacmp_rs::ShaComparator` to produce a comparison.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Configuration {
-    pub sha_ref: String,
-    pub sha_type: HashType,
+    pub hash_reference: String,
+    pub hash_type: HashType,
     pub file_path: String,
 }
 
 impl Configuration {
+    /// ## Brief:
     /// Parse the provided iterator into a `shacmp_rs::parser::Configuration` configuration object
     /// that can be used with the `shacmp_rs::comparator::ShaComparator`.
     ///
     /// This is expected to be used with the CLI, so the first item in the iterator is ignored since it is
     /// the path to the executable.
-    ///
-    /// ## Return
+    /// ## Parameters:
+    /// - An `Iterator` over `String` items
+    ///   - *Note: The order of the items should be the following:*
+    ///     - 1: Path to executable (ignored during parsing)
+    ///     - 2: Path to the file to process
+    ///     - 3: Type of hash algorithm to use (See `HashType::from_str()` for valid input).
+    ///     - 4: Hex string of the reference hash to compare with.
+    /// ## Return:
     /// - `Configuration` on success
     /// - `ParsingError` on failure
-    ///
-    /// ## Example
+    /// ## Example:
     /// ```
     /// use shacmp_rs::parser::{Configuration, ParsingError};
     ///
@@ -79,13 +85,13 @@ impl Configuration {
         args.next().unwrap();
 
         let file_path = args.next().ok_or(ParsingError::MissingFile)?;
-        let sha_type = args.next().ok_or(ParsingError::MissingShaType)?;
-        let sha_type = HashType::from_str(&sha_type)?;
-        let sha_ref = args.next().ok_or(ParsingError::MissingShaRef)?;
+        let hash_type = args.next().ok_or(ParsingError::MissingHashType)?;
+        let hash_type = HashType::from_str(&hash_type)?;
+        let hash_reference = args.next().ok_or(ParsingError::MissingHashReference)?;
 
         Ok(Configuration {
-            sha_ref,
-            sha_type,
+            hash_reference,
+            hash_type,
             file_path,
         })
     }
@@ -95,8 +101,8 @@ impl fmt::Display for Configuration {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "File path:\t{}\nSHA type:\t{}\nSHA reference:\t{}",
-            self.file_path, self.sha_type, self.sha_ref
+            "Path to file to process:\t\t{}\nSelected hash algorithm type:\t\t{}\nHash string reference to compare:\t{}",
+            self.file_path, self.hash_type, self.hash_reference
         )
     }
 }
@@ -118,8 +124,8 @@ mod tests {
         // Expected Argument
         let expected = Configuration {
             file_path: String::from("test.txt"),
-            sha_type: HashType::Sha256,
-            sha_ref: String::from(
+            hash_type: HashType::Sha256,
+            hash_reference: String::from(
                 "c87e2ca771bab6024c269b933389d2a92d4941c848c52f155b9b84e1f109fe35",
             ),
         };
@@ -138,7 +144,7 @@ mod tests {
             String::from("invalid"),
             String::from("c87e2ca771bab6024c269b933389d2a92d4941c848c52f155b9b84e1f109fe35"),
         ];
-        let expected = ParsingError::InvalidShaType;
+        let expected = ParsingError::InvalidHashType;
         // Assertion
         let result = Configuration::parse(input.into_iter())
             .expect_err("Should fail due to an Invalid ShaType");
@@ -165,7 +171,7 @@ mod tests {
             String::from("Executable Path - Ignored"),
             String::from("test.txt"),
         ];
-        let expected = ParsingError::MissingShaType;
+        let expected = ParsingError::MissingHashType;
         // Assertion
         let result = Configuration::parse(input.into_iter())
             .expect_err("Should fail due to an missing sha type in argument list");
@@ -181,7 +187,7 @@ mod tests {
             String::from("test.txt"),
             String::from("256"),
         ];
-        let expected = ParsingError::MissingShaRef;
+        let expected = ParsingError::MissingHashReference;
         // Assertion
         let result = Configuration::parse(input.into_iter())
             .expect_err("Should fail due to an missing sha type in argument list");

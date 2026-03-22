@@ -1,56 +1,83 @@
-//! This module contains the tools to perform the comparison.
-use sha2::Digest;
-
-use crate::sha::HashType;
-
-use super::parser::Configuration;
+//! Contains the comparison functionalities.
+//! Requires a crate::parser::Configuration object to produce the comparison.
+//!
+//! ## Example
+//! ```
+//! use shacmp_rs::{
+//!     algorithms::HashType,
+//!     parser::Configuration,
+//!     comparator::{
+//!         Comparator,
+//!         ComparisonResult
+//!         }
+//!     };
+//!
+//!    // Valid configuration object.
+//!    // To generate configuration object, it is prefered to use the `Configuration::parse()` method.
+//!    // as it will validate the inputs.
+//!    let input = Configuration {
+//!        file_path: String::from("Utils/test_file.txt"),
+//!        hash_type: HashType::Sha224,
+//!        hash_reference: String::from("7fd0d23a4d54951ac4c9065249ff29954eb911e57e911a65d7306274"),
+//!    };
+//!
+//!    let comparator = Comparator::build(&input).expect("Should be valid inputs");
+//!    let result = comparator.compare(); // The comparator is consumed here.
+//!    assert_eq!(ComparisonResult::Equal, result);
+//! ```
 use std::error::Error;
 use std::fs;
 
+use crate::adapter::HasherWrapper;
+use crate::parser::Configuration;
+
+/// Possible results resulting of a comparison between
+/// the produced hash hex string and the reference provided.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ComparisonResult {
     Equal,
     Different,
 }
 
-pub struct Comparator {
-    file_content: String,
+/// Retrieve the file content, produce a hash string for the file and compare it with the
+/// reference string provided by the configuration
+pub struct Comparator<'a> {
+    /// Reference to the `Configuration` use for this `Comparator`.
+    configuration: &'a Configuration,
+    /// The content of the file provided by the `Configuration`.
+    file_content: Vec<u8>,
 }
 
-impl Comparator {
-    pub fn build(config: &Configuration) -> Result<Self, Box<dyn Error>> {
-        let file_content = fs::read_to_string(&config.file_path)?;
+impl<'a> Comparator<'a> {
+    /// ## Brief:
+    /// Build a new comparator based on the configuration. If the file cannot be read, will throw an error.
+    /// ## Parameters:
+    /// - `configuration`: `Configuration` object reference. Needs to outlive the Comparator.
+    /// ## Return:
+    /// - `Box<dyn Error>>` if reading the file failed
+    /// - `Comparator` on success
+    pub fn build(configuration: &'a Configuration) -> Result<Self, Box<dyn Error>> {
+        let file_content = fs::read(&configuration.file_path)?;
 
-        Ok(Comparator { file_content })
+        Ok(Comparator {
+            configuration,
+            file_content,
+        })
     }
 
-    pub fn run(self, config: &Configuration) -> ComparisonResult {
-        // Compute the hash using the corresponding algorithm
-        let hash = match config.sha_type {
-            HashType::Sha224 => {
-                let tmp = sha2::Sha224::digest(self.file_content.as_bytes());
-                // Format as a hex string
-                format!("{:x}", tmp)
-            }
-            HashType::Sha256 => {
-                let tmp = sha2::Sha256::digest(self.file_content.as_bytes());
-                // Format as a hex string
-                format!("{:x}", tmp)
-            }
-            HashType::Sha384 => {
-                let tmp = sha2::Sha384::digest(self.file_content.as_bytes());
-                // Format as a hex string
-                format!("{:x}", tmp)
-            }
-            HashType::Sha512 => {
-                let tmp = sha2::Sha512::digest(self.file_content.as_bytes());
-                // Format as a hex string
-                format!("{:x}", tmp)
-            }
-        };
-
+    /// ## Brief:
+    /// After a successful `build()` call, compare the content of the file
+    /// and the reference hex string provided by the `Configuration`.
+    ///
+    /// ***Note: Consumes the `Comparator`, making it unusable after this call.***
+    /// ## Return:
+    /// - `ComparisonResult::Equal` if the hashes are equal,
+    /// - `ComparisonResult::Different` otherwise.
+    pub fn compare(self) -> ComparisonResult {
+        // Compute the hash using the algorithm from the configuration
+        let hash = HasherWrapper::new(&self.configuration.hash_type).hash(&self.file_content);
         // Compare the reference string with the computed one
-        match config.sha_ref == hash {
+        match self.configuration.hash_reference == hash {
             true => ComparisonResult::Equal,
             false => ComparisonResult::Different,
         }
@@ -60,7 +87,7 @@ impl Comparator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sha;
+    use crate::adapter;
 
     const TEST_FILE: &str = "Utils/test_file.txt";
     // The following reference string have been produced using the series of shasum binaries from the GNU coreutils 9.7
@@ -75,14 +102,14 @@ mod tests {
         // Expected Arguments
         let input = Configuration {
             file_path: String::from(TEST_FILE),
-            sha_type: sha::HashType::Sha224,
-            sha_ref: String::from(SHA224_REF),
+            hash_type: adapter::HashType::Sha224,
+            hash_reference: String::from(SHA224_REF),
         };
 
         let expected = ComparisonResult::Equal;
 
         let comparator = Comparator::build(&input).expect("Should be valid inputs");
-        let result = comparator.run(&input);
+        let result = comparator.compare();
         assert_eq!(expected, result);
     }
 
@@ -91,15 +118,15 @@ mod tests {
         // Expected Arguments
         let input = Configuration {
             file_path: String::from(TEST_FILE),
-            sha_type: sha::HashType::Sha224,
+            hash_type: adapter::HashType::Sha224,
             // Change the reference string to simulate the unmatch
-            sha_ref: String::from(SHA224_REF).to_ascii_uppercase(),
+            hash_reference: String::from(SHA224_REF).to_ascii_uppercase(),
         };
 
         let expected = ComparisonResult::Different;
 
         let comparator = Comparator::build(&input).expect("Should be valid inputs");
-        let result = comparator.run(&input);
+        let result = comparator.compare();
         assert_eq!(expected, result);
     }
 
@@ -108,14 +135,14 @@ mod tests {
         // Expected Arguments
         let input = Configuration {
             file_path: String::from(TEST_FILE),
-            sha_type: sha::HashType::Sha256,
-            sha_ref: String::from(SHA256_REF),
+            hash_type: adapter::HashType::Sha256,
+            hash_reference: String::from(SHA256_REF),
         };
 
         let expected = ComparisonResult::Equal;
 
         let comparator = Comparator::build(&input).expect("Should be valid inputs");
-        let result = comparator.run(&input);
+        let result = comparator.compare();
         assert_eq!(expected, result);
     }
 
@@ -124,15 +151,15 @@ mod tests {
         // Expected Arguments
         let input = Configuration {
             file_path: String::from(TEST_FILE),
-            sha_type: sha::HashType::Sha256,
+            hash_type: adapter::HashType::Sha256,
             // Change the reference string to simulate the unmatch
-            sha_ref: String::from(SHA256_REF).to_ascii_uppercase(),
+            hash_reference: String::from(SHA256_REF).to_ascii_uppercase(),
         };
 
         let expected = ComparisonResult::Different;
 
         let comparator = Comparator::build(&input).expect("Should be valid inputs");
-        let result = comparator.run(&input);
+        let result = comparator.compare();
         assert_eq!(expected, result);
     }
 
@@ -141,14 +168,14 @@ mod tests {
         // Expected Arguments
         let input = Configuration {
             file_path: String::from(TEST_FILE),
-            sha_type: sha::HashType::Sha384,
-            sha_ref: String::from(SHA384_REF),
+            hash_type: adapter::HashType::Sha384,
+            hash_reference: String::from(SHA384_REF),
         };
 
         let expected = ComparisonResult::Equal;
 
         let comparator = Comparator::build(&input).expect("Should be valid inputs");
-        let result = comparator.run(&input);
+        let result = comparator.compare();
         assert_eq!(expected, result);
     }
 
@@ -157,15 +184,15 @@ mod tests {
         // Expected Arguments
         let input = Configuration {
             file_path: String::from(TEST_FILE),
-            sha_type: sha::HashType::Sha384,
+            hash_type: adapter::HashType::Sha384,
             // Change the reference string to simulate the unmatch
-            sha_ref: String::from(SHA384_REF).to_ascii_uppercase(),
+            hash_reference: String::from(SHA384_REF).to_ascii_uppercase(),
         };
 
         let expected = ComparisonResult::Different;
 
         let comparator = Comparator::build(&input).expect("Should be valid inputs");
-        let result = comparator.run(&input);
+        let result = comparator.compare();
         assert_eq!(expected, result);
     }
 
@@ -174,14 +201,14 @@ mod tests {
         // Expected Arguments
         let input = Configuration {
             file_path: String::from(TEST_FILE),
-            sha_type: sha::HashType::Sha512,
-            sha_ref: String::from(SHA512_REF),
+            hash_type: adapter::HashType::Sha512,
+            hash_reference: String::from(SHA512_REF),
         };
 
         let expected = ComparisonResult::Equal;
 
         let comparator = Comparator::build(&input).expect("Should be valid inputs");
-        let result = comparator.run(&input);
+        let result = comparator.compare();
         assert_eq!(expected, result);
     }
 
@@ -190,15 +217,15 @@ mod tests {
         // Expected Arguments
         let input = Configuration {
             file_path: String::from(TEST_FILE),
-            sha_type: sha::HashType::Sha512,
+            hash_type: adapter::HashType::Sha512,
             // Change the reference string to simulate the unmatch
-            sha_ref: String::from(SHA512_REF).to_ascii_uppercase(),
+            hash_reference: String::from(SHA512_REF).to_ascii_uppercase(),
         };
 
         let expected = ComparisonResult::Different;
 
         let comparator = Comparator::build(&input).expect("Should be valid inputs");
-        let result = comparator.run(&input);
+        let result = comparator.compare();
         assert_eq!(expected, result);
     }
 }
