@@ -1,5 +1,7 @@
 # shacmp_rs
 
+[![CI](https://github.com/alrapal/shacmp_rs/actions/workflows/rust.yml/badge.svg)](https://github.com/alrapal/shacmp_rs/actions/workflows/rust.yml)
+
 When downloading software from the internet, often applications provide with a checksum string to verify against a downloaded asset to ensure the integrity of that asset.
 
 `shacmp_rs` is a CLI tool that allows to easily verify the checksums generated using the SHA algorithms.

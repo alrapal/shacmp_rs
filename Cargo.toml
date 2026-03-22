@@ -2,7 +2,23 @@
 name = "shacmp_rs"
 version = "0.1.0"
 edition = "2024"
+description = "Comparator for SHA based checksum and their associated files."
 authors = ["Alexandre Rancati-Palmer <arp-dev@pm.me>"]
+readme = "./README.md"
+license_file = "./LICENSE.md"
+license = "MIT"
+exclude = ["Docs/*.drawio"]
+repository = "https://github.com/alrapal/shacmp_rs"
+keywords = ["checksum", "comparator", "sha"]
+categories = ["command-line-utilities", "library"]
 
 [dependencies]
 sha2 = "0.10.9"
+
+[lib]
+path = "src/lib.rs"
+test = true
+doctest = true
+bench = false
+doc = true
+crate-type = ["lib"]
